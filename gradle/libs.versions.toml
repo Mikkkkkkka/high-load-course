@@ -1,0 +1,62 @@
+[versions]
+kotlin = "2.2.0"
+spring-boot = "3.5.0"
+spring-dependency-management = "1.1.7"
+
+coroutines-core = "1.9.0"
+okhttp = "4.12.0"
+tiny-es = "2.7.5"
+resilience4j = "2.2.0"
+jackson-jsr310 = "2.9.8"
+caffeine = "3.1.8"
+
+
+[libraries]
+
+# Spring Boot
+spring-web = { module = "org.springframework.boot:spring-boot-starter-web" }
+spring-jetty = { module = "org.springframework.boot:spring-boot-starter-jetty" }
+spring-actuator = { module = "org.springframework.boot:spring-boot-starter-actuator" }
+spring-test = { module = "org.springframework.boot:spring-boot-starter-test" }
+
+# Kotlin
+kotlin-reflect = { module = "org.jetbrains.kotlin:kotlin-reflect", version.ref = "kotlin" }
+kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
+
+# Coroutines
+kotlin-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines-core" }
+kotlin-coroutines-reactor = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-reactor" }
+
+# HTTP
+okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
+
+# Jetty
+jetty-http2-server = { module = "org.eclipse.jetty.http2:jetty-http2-server" }
+
+# Jackson
+jackson-kotlin = { module = "com.fasterxml.jackson.module:jackson-module-kotlin" }
+jackson-java-time = { module = "com.fasterxml.jackson.datatype:jackson-datatype-jsr310", version.ref = "jackson-jsr310" }
+
+# Cache
+caffeine = { module = "com.github.ben-manes.caffeine:caffeine", version.ref = "caffeine" }
+
+# Resilience4j
+resilience4j-ratelimiter = { module = "io.github.resilience4j:resilience4j-ratelimiter", version.ref = "resilience4j" }
+
+# Tiny Event Sourcing
+tiny-es-spring = { module = "ru.quipy:tiny-event-sourcing-spring-boot-starter", version.ref = "tiny-es" }
+tiny-es-postgres = { module = "ru.quipy:tiny-postgres-event-store-spring-boot-starter", version.ref = "tiny-es" }
+
+# Metrics
+micrometer-prometheus = { module = "io.micrometer:micrometer-registry-prometheus" }
+
+
+[plugins]
+
+# Kotlin
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+kotlin-spring = { id = "org.jetbrains.kotlin.plugin.spring", version.ref = "kotlin" }
+
+# Spring
+spring-boot = { id = "org.springframework.boot", version.ref = "spring-boot" }
+spring-dependency-management = { id = "io.spring.dependency-management", version.ref = "spring-dependency-management" }
