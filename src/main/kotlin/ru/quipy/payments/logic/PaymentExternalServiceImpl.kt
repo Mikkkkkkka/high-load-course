@@ -37,11 +37,33 @@ class PaymentExternalSystemAdapterImpl(
 
     private val serviceName = properties.serviceName
     private val accountName = properties.accountName
+    private val sendLock = Any()
+    private val sendIntervalNanos = (1_000_000_000L + properties.rateLimitPerSec - 1) /
+        properties.rateLimitPerSec + 1_000_000L
+    private var lastSendAt: Long? = null
 
     private val client = OkHttpClient.Builder()
         .retryOnConnectionFailure(false)
         .readTimeout(0, TimeUnit.MILLISECONDS)
+        .addNetworkInterceptor { chain ->
+            val task = requireNotNull(chain.request().tag(PaymentTask::class.java))
+            awaitSendSlot(task.deadline)
+            chain.proceed(chain.request())
+        }
         .build()
+
+    private fun awaitSendSlot(deadline: Long) = synchronized(sendLock) {
+        while (true) {
+            val remainingMillis = deadline - now()
+            if (remainingMillis <= 0) throw SocketTimeoutException("Payment deadline expired")
+            val previousSendAt = lastSendAt
+            val waitNanos = if (previousSendAt == null) 0L else
+                sendIntervalNanos - (System.nanoTime() - previousSendAt)
+            if (waitNanos <= 0) break
+            TimeUnit.NANOSECONDS.sleep(minOf(waitNanos, TimeUnit.MILLISECONDS.toNanos(remainingMillis)))
+        }
+        lastSendAt = System.nanoTime()
+    }
 
     private val scheduler = PaymentAccountScheduler(
         properties = properties,
@@ -111,7 +133,7 @@ class PaymentExternalSystemAdapterImpl(
         }
 
         logger.info(
-            "[$accountName] Submit: $paymentId , txId: $transactionId"
+            "[$accountName] Prepared: $paymentId , txId: $transactionId"
         )
 
         try {
@@ -127,6 +149,7 @@ class PaymentExternalSystemAdapterImpl(
                             "&amount=$amount"
                 )
                 post(emptyBody)
+                tag(PaymentTask::class.java, task)
             }.build()
 
             val remainingMillis = task.deadline - now()
