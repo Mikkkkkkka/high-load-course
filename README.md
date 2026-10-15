@@ -1,4 +1,7 @@
 # Template for the HighLoad course
+
+Отчёт: [Case-3 — анализ перегрузки acc-5](docs/case-3/README.md).
+
 This project is based on [Tiny Event Sourcing library](https://github.com/andrsuh/tiny-event-sourcing)
 
 ### Run PostgreSql
