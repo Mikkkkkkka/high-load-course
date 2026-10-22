@@ -3,7 +3,9 @@ package ru.quipy.custom
 import org.slf4j.LoggerFactory
 import ru.quipy.common.utils.NamedThreadFactory
 import ru.quipy.payments.logic.PaymentAccountProperties
+import ru.quipy.payments.logic.PaymentFlowLimits
 import java.util.UUID
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Executors
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.Semaphore
@@ -14,6 +16,7 @@ data class PaymentTask(
     val amount: Int,
     val paymentStartedAt: Long,
     val deadline: Long,
+    val completion: CompletableFuture<Void> = CompletableFuture(),
 )
 
 class PaymentAccountScheduler(
@@ -21,6 +24,7 @@ class PaymentAccountScheduler(
     private val paymentHandler: (PaymentTask) -> Unit,
     private val failureHandler: (PaymentTask, String) -> Unit,
     queueCapacity: Int = 1_000,
+    flowLimits: PaymentFlowLimits = PaymentFlowLimits(properties, properties.averageProcessingTime),
 ) : AutoCloseable {
     init {
         require(properties.rateLimitPerSec > 0)
@@ -29,7 +33,7 @@ class PaymentAccountScheduler(
 
     private val logger = LoggerFactory.getLogger(javaClass)
     private val queue = LinkedBlockingQueue<PaymentTask>(queueCapacity)
-    private val parallelRequests = properties.parallelRequests
+    private val parallelRequests = flowLimits.parallelism
     private val slots = Semaphore(parallelRequests)
     private val workers = Executors.newFixedThreadPool(
         parallelRequests, NamedThreadFactory("payment-${properties.accountName}-http")
@@ -39,12 +43,10 @@ class PaymentAccountScheduler(
     )
     private var closed = false
 
-    private val intervalNanos = (1_000_000_000L + properties.rateLimitPerSec - 1) /
-            properties.rateLimitPerSec + 1_000_000L
-
     init {
+        // Wake up to fill free workers as a batch; rate limiting happens at the network boundary.
         dispatcher.scheduleWithFixedDelay(
-            { dispatchNext() }, 0, intervalNanos, TimeUnit.NANOSECONDS
+            { dispatchAvailable() }, 0, 1, TimeUnit.MILLISECONDS
         )
     }
 
@@ -57,27 +59,29 @@ class PaymentAccountScheduler(
     }
 
     @Synchronized
-    private fun dispatchNext() {
-        if (closed || queue.isEmpty() || !slots.tryAcquire()) return
-        val task = queue.remove()
-        try {
-            workers.execute {
-                try {
-                    if (System.currentTimeMillis() >= task.deadline) {
-                        fail(task, "Payment deadline expired")
-                    } else {
-                        paymentHandler(task)
+    private fun dispatchAvailable() {
+        while (!closed && queue.isNotEmpty() && slots.tryAcquire()) {
+            val task = queue.remove()
+            try {
+                workers.execute {
+                    try {
+                        if (System.currentTimeMillis() >= task.deadline) {
+                            fail(task, "Payment deadline expired")
+                        } else {
+                            paymentHandler(task)
+                        }
+                    } catch (e: Exception) {
+                        logger.error("Payment {} failed", task.paymentId, e)
+                        fail(task, "Payment execution failed")
+                    } finally {
+                        slots.release()
+                        task.completion.complete(null)
                     }
-                } catch (e: Exception) {
-                    logger.error("Payment {} failed", task.paymentId, e)
-                    fail(task, "Payment execution failed")
-                } finally {
-                    slots.release()
                 }
+            } catch (e: Exception) {
+                slots.release()
+                fail(task, "Payment worker unavailable")
             }
-        } catch (e: Exception) {
-            slots.release()
-            fail(task, "Payment worker unavailable")
         }
     }
 
@@ -86,6 +90,8 @@ class PaymentAccountScheduler(
             failureHandler(task, reason)
         } catch (e: Exception) {
             logger.error("Could not record failure for payment {}", task.paymentId, e)
+        } finally {
+            task.completion.complete(null)
         }
     }
 

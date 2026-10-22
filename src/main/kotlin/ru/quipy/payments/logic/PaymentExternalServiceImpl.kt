@@ -10,18 +10,21 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.slf4j.LoggerFactory
 import ru.quipy.core.EventSourcingService
+import ru.quipy.common.utils.SlidingWindowRateLimiter
 import ru.quipy.custom.PaymentAccountScheduler
 import ru.quipy.custom.PaymentTask
 import ru.quipy.payments.api.PaymentAggregate
 import java.net.SocketTimeoutException
 import java.time.Duration
 import java.util.*
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
 
 
 // Advice: always treat time as a Duration
 class PaymentExternalSystemAdapterImpl(
     private val properties: PaymentAccountProperties,
+    override val flowLimits: PaymentFlowLimits,
     private val paymentESService: EventSourcingService<UUID, PaymentAggregate, PaymentAggregateState>,
     private val paymentProviderHostPort: String,
     private val token: String,
@@ -37,38 +40,25 @@ class PaymentExternalSystemAdapterImpl(
 
     private val serviceName = properties.serviceName
     private val accountName = properties.accountName
-    private val sendLock = Any()
-    private val sendIntervalNanos = (1_000_000_000L + properties.rateLimitPerSec - 1) /
-        properties.rateLimitPerSec + 1_000_000L
-    private var lastSendAt: Long? = null
+    private val sendWindow = SlidingWindowRateLimiter(properties.rateLimitPerSec.toLong(), Duration.ofSeconds(1))
 
     private val client = OkHttpClient.Builder()
         .retryOnConnectionFailure(false)
         .readTimeout(0, TimeUnit.MILLISECONDS)
         .addNetworkInterceptor { chain ->
             val task = requireNotNull(chain.request().tag(PaymentTask::class.java))
-            awaitSendSlot(task.deadline)
+            sendWindow.tickBlocking(task.deadline)
             chain.proceed(chain.request())
         }
         .build()
 
-    private fun awaitSendSlot(deadline: Long) = synchronized(sendLock) {
-        while (true) {
-            val remainingMillis = deadline - now()
-            if (remainingMillis <= 0) throw SocketTimeoutException("Payment deadline expired")
-            val previousSendAt = lastSendAt
-            val waitNanos = if (previousSendAt == null) 0L else
-                sendIntervalNanos - (System.nanoTime() - previousSendAt)
-            if (waitNanos <= 0) break
-            TimeUnit.NANOSECONDS.sleep(minOf(waitNanos, TimeUnit.MILLISECONDS.toNanos(remainingMillis)))
-        }
-        lastSendAt = System.nanoTime()
-    }
-
     private val scheduler = PaymentAccountScheduler(
         properties = properties,
         paymentHandler = ::performPayment,
-        failureHandler = ::recordFailure
+        failureHandler = ::recordFailure,
+        // The admission buffer includes active tasks; allow them to arrive as a burst.
+        queueCapacity = flowLimits.bufferCapacity,
+        flowLimits = flowLimits,
     )
 
     private val queueWait = Timer.builder("payment.queue.wait")
@@ -99,15 +89,18 @@ class PaymentExternalSystemAdapterImpl(
         amount: Int,
         paymentStartedAt: Long,
         deadline: Long
-    ) {
+    ): CompletableFuture<Void> {
+        val completion = CompletableFuture<Void>()
         scheduler.submit(
             PaymentTask(
                 paymentId = paymentId,
                 amount = amount,
                 paymentStartedAt = paymentStartedAt,
-                deadline = deadline
+                deadline = deadline,
+                completion = completion
             )
         )
+        return completion
     }
 
 

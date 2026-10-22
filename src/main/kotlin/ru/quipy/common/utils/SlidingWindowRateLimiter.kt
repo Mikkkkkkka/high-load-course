@@ -1,70 +1,51 @@
 package ru.quipy.common.utils
 
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.asCoroutineDispatcher
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import org.slf4j.Logger
-import org.slf4j.LoggerFactory
+import java.net.SocketTimeoutException
 import java.time.Duration
-import java.util.concurrent.Executors
-import java.util.concurrent.PriorityBlockingQueue
-import java.util.concurrent.atomic.AtomicLong
+import java.util.ArrayDeque
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
 class SlidingWindowRateLimiter(
     private val rate: Long,
-    private val window: Duration,
+    window: Duration,
+    private val nanoTime: () -> Long = System::nanoTime,
 ) : RateLimiter {
-    private val rateLimiterScope = CoroutineScope(Executors.newSingleThreadExecutor().asCoroutineDispatcher())
+    init {
+        require(rate > 0)
+        require(!window.isNegative && !window.isZero)
+    }
 
-    private val sum = AtomicLong(0)
-    private val queue = PriorityBlockingQueue<Measure>(10_000)
+    private val windowNanos = window.toNanos()
+    private val starts = ArrayDeque<Long>()
+    private val lock = ReentrantLock()
+    private val changed = lock.newCondition()
 
-    override fun tick(): Boolean {
+    override fun tick(): Boolean = lock.withLock { tryAcquire(nanoTime()) }
+
+    fun tickBlocking() = awaitPermit(null)
+
+    fun tickBlocking(deadline: Long) = awaitPermit(deadline)
+
+    private fun awaitPermit(deadline: Long?) = lock.withLock {
         while (true) {
-            val curSum = sum.get()
-            if (curSum >= rate) return false
-            if (sum.compareAndSet(curSum, curSum + 1)) {
-                queue.add(Measure(1, System.currentTimeMillis()))
-                return true
+            val remainingMillis = deadline?.minus(System.currentTimeMillis())
+            if (remainingMillis != null && remainingMillis <= 0) {
+                throw SocketTimeoutException("Payment deadline expired")
             }
+            val now = nanoTime()
+            if (tryAcquire(now)) return
+            val waitNanos = windowNanos - (now - starts.first)
+            val remainingNanos = remainingMillis?.let { TimeUnit.MILLISECONDS.toNanos(it) } ?: Long.MAX_VALUE
+            changed.awaitNanos(minOf(waitNanos, remainingNanos))
         }
     }
 
-    fun tickBlocking() {
-        while (!tick()) {
-            Thread.sleep(10)
-        }
-    }
-
-    data class Measure(
-        val value: Long,
-        val timestamp: Long
-    ) : Comparable<Measure> {
-        override fun compareTo(other: Measure): Int {
-            return timestamp.compareTo(other.timestamp)
-        }
-    }
-
-    private val releaseJob = rateLimiterScope.launch {
-        while (true) {
-            val head = queue.peek()
-            val winStart = System.currentTimeMillis() - window.toMillis()
-            if (head == null) {
-                delay(1L)
-                continue
-            }
-            if (head.timestamp > winStart) {
-                delay(head.timestamp - winStart)
-                continue
-            }
-            sum.addAndGet(-1)
-            queue.take()
-        }
-    }.invokeOnCompletion { th -> if (th != null) logger.error("Rate limiter release job completed", th) }
-    companion object {
-        private val logger: Logger = LoggerFactory.getLogger(SlidingWindowRateLimiter::class.java)
+    private fun tryAcquire(now: Long): Boolean {
+        while (starts.isNotEmpty() && now - starts.first >= windowNanos) starts.removeFirst()
+        if (starts.size.toLong() >= rate) return false
+        starts.addLast(now)
+        return true
     }
 }
