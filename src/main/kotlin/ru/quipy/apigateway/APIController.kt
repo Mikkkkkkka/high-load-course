@@ -4,8 +4,10 @@ import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.web.bind.annotation.*
+import org.springframework.http.ResponseEntity
 import ru.quipy.orders.repository.OrderRepository
 import ru.quipy.payments.logic.OrderPayer
+import ru.quipy.payments.logic.PaymentBufferFullException
 import java.util.*
 
 @RestController
@@ -57,15 +59,21 @@ class APIController {
     @PostMapping("/orders/{orderId}/payment")
     fun payOrder(@PathVariable orderId: UUID, @RequestParam deadline: Long): PaymentSubmissionDto {
         val paymentId = UUID.randomUUID()
-        val order = orderRepository.findById(orderId)?.let {
-            orderRepository.save(it.copy(status = OrderStatus.PAYMENT_IN_PROGRESS))
-            it
-        } ?: throw IllegalArgumentException("No such order $orderId")
+        val order = orderRepository.findById(orderId)
+            ?: throw IllegalArgumentException("No such order $orderId")
 
 
-        val createdAt = orderPayer.processPayment(orderId, order.price, paymentId, deadline)
+        val createdAt = orderPayer.processPayment(orderId, order.price, paymentId, deadline) {
+            orderRepository.save(order.copy(status = OrderStatus.PAYMENT_IN_PROGRESS))
+        }
         return PaymentSubmissionDto(createdAt, paymentId)
     }
+
+    @ExceptionHandler(PaymentBufferFullException::class)
+    fun paymentBufferFull(exception: PaymentBufferFullException): ResponseEntity<String> = ResponseEntity.status(429)
+        // The course generator expects an absolute timestamp in milliseconds.
+        .header("Retry-After", (System.currentTimeMillis() + exception.retryDelayMillis).toString())
+        .body("Payment buffer full. Retry later.")
 
     class PaymentSubmissionDto(
         val timestamp: Long,

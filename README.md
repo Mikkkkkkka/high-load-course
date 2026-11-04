@@ -2,6 +2,8 @@
 
 Отчёт: [Case-3 — анализ перегрузки acc-5](docs/case-3/README.md).
 
+Отчёт: [Case-4 — буферизация и back pressure acc-18](docs/case-4/README.md).
+
 This project is based on [Tiny Event Sourcing library](https://github.com/andrsuh/tiny-event-sourcing)
 
 ### Run PostgreSql
