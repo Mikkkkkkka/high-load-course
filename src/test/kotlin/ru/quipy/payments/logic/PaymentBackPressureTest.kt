@@ -9,6 +9,7 @@ import org.springframework.test.util.ReflectionTestUtils
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
 import ru.quipy.apigateway.APIController
+import ru.quipy.common.utils.SlidingWindowRateLimiter
 import ru.quipy.core.EventSourcingService
 import ru.quipy.core.BasicAggregateRegistry
 import ru.quipy.core.EventSourcingProperties
@@ -68,7 +69,10 @@ class PaymentBackPressureTest {
         Duration.ofSeconds(3),
         Duration.ofSeconds(2),
     )
-    private val payer = OrderPayer(registry, events, service, limits, backpressureEnabled = true)
+    private val payer = OrderPayer(registry, events, service, limits, backpressureEnabled = true).apply {
+        // Buffer tests isolate capacity from the independently tested admission rate.
+        ReflectionTestUtils.setField(this, "admissionRate", SlidingWindowRateLimiter(Long.MAX_VALUE, Duration.ofSeconds(1)))
+    }
 
     @AfterEach
     fun close() {
@@ -79,6 +83,22 @@ class PaymentBackPressureTest {
 
     private fun submit(onAccepted: () -> Unit = {}) {
         payer.processPayment(UUID.randomUUID(), 100, UUID.randomUUID(), System.currentTimeMillis() + 3000, onAccepted)
+    }
+
+    @Test
+    fun `admission rate rejects before accepting even when buffer has space`() {
+        ReflectionTestUtils.setField(payer, "admissionRate", SlidingWindowRateLimiter(1, Duration.ofDays(1)))
+        submit()
+        assertNotNull(submitted.poll(5, TimeUnit.SECONDS))
+        pending.remove().complete(null)
+        awaitBufferSize(0.0)
+
+        val accepted = AtomicBoolean(false)
+        assertThrows<PaymentBufferFullException> { submit { accepted.set(true) } }
+        assertFalse(accepted.get())
+        assertEquals(0.0, registry.get("payment.buffer.size").gauge().value())
+        assertEquals(1.0, registry.get("payment.admission.rejected").counter().count())
+        assertTrue(submitted.isEmpty())
     }
 
     private fun fillBuffer() {

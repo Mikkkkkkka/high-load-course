@@ -12,10 +12,10 @@ class PaymentFlowLimitsTest {
     fun `case 4 derives all limits from account and budget`() {
         val limits = PaymentFlowLimits(account, Duration.ofSeconds(3), Duration.ofSeconds(2))
         assertEquals(110.0, limits.throughputPerSecond)
-        assertEquals(110, limits.parallelism)
+        assertEquals(220, limits.parallelism)
         assertEquals(0, limits.waitingCapacity)
-        assertEquals(110, limits.bufferCapacity)
-        assertEquals(1000L, limits.retryDelayMillis)
+        assertEquals(220, limits.bufferCapacity)
+        assertEquals(10L, limits.retryDelayMillis)
     }
 
     @Test
@@ -25,7 +25,7 @@ class PaymentFlowLimitsTest {
         assertEquals(5, limits.parallelism)
         assertEquals(0, limits.waitingCapacity)
         assertEquals(5, limits.bufferCapacity)
-        assertEquals(1000L, limits.retryDelayMillis)
+        assertEquals(400L, limits.retryDelayMillis)
     }
 
     @Test
@@ -42,14 +42,14 @@ class PaymentFlowLimitsTest {
         assertEquals(2, limits.parallelism)
         assertEquals(0, limits.waitingCapacity)
         assertEquals(2, limits.bufferCapacity)
-        assertEquals(1000L, limits.retryDelayMillis)
+        assertEquals(334L, limits.retryDelayMillis)
     }
 
     @Test
     fun `longer budget allows waiting after reserving processing and rate window`() {
         val limits = PaymentFlowLimits(account, Duration.ofSeconds(5), Duration.ofSeconds(2))
         assertEquals(220, limits.waitingCapacity)
-        assertEquals(330, limits.bufferCapacity)
+        assertEquals(440, limits.bufferCapacity)
     }
 
     @Test

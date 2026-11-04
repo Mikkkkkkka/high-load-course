@@ -10,9 +10,11 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import ru.quipy.common.utils.CallerBlockingRejectedExecutionHandler
 import ru.quipy.common.utils.NamedThreadFactory
+import ru.quipy.common.utils.SlidingWindowRateLimiter
 import ru.quipy.core.EventSourcingService
 import ru.quipy.payments.api.PaymentAggregate
 import java.util.*
+import java.time.Duration
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.ThreadPoolExecutor
@@ -34,6 +36,9 @@ class OrderPayer(
 
     // Keep a place reserved until the external payment finishes, including both queues.
     private val bufferSlots = PaymentAdmissionBuffer(flowLimits.bufferCapacity)
+    private val admissionRate = SlidingWindowRateLimiter(
+        flowLimits.throughputPerSecond.toLong().coerceAtLeast(1L), Duration.ofSeconds(1),
+    )
     private val rejected = Counter.builder("payment.admission.rejected").register(meterRegistry)
 
     private val paymentExecutor = ThreadPoolExecutor(
@@ -80,7 +85,7 @@ class OrderPayer(
         deadline: Long,
         onAccepted: () -> Unit,
     ): Long {
-        if (backpressureEnabled && !bufferSlots.tryAcquire()) {
+        if (backpressureEnabled && (!admissionRate.tick() || !bufferSlots.tryAcquire())) {
             rejected.increment()
             throw PaymentBufferFullException(flowLimits.retryDelayMillis)
         }

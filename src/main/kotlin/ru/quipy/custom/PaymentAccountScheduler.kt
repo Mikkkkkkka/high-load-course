@@ -6,9 +6,9 @@ import ru.quipy.payments.logic.PaymentAccountProperties
 import ru.quipy.payments.logic.PaymentFlowLimits
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
-import java.util.concurrent.Executors
 import java.util.concurrent.LinkedBlockingQueue
-import java.util.concurrent.Semaphore
+import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
 
 data class PaymentTask(
@@ -32,55 +32,38 @@ class PaymentAccountScheduler(
     }
 
     private val logger = LoggerFactory.getLogger(javaClass)
-    private val queue = LinkedBlockingQueue<PaymentTask>(queueCapacity)
-    private val parallelRequests = flowLimits.parallelism
-    private val slots = Semaphore(parallelRequests)
-    private val workers = Executors.newFixedThreadPool(
-        parallelRequests, NamedThreadFactory("payment-${properties.accountName}-http")
+    private val workers = ThreadPoolExecutor(
+        flowLimits.parallelism, flowLimits.parallelism, 0L, TimeUnit.MILLISECONDS,
+        LinkedBlockingQueue(queueCapacity), NamedThreadFactory("payment-${properties.accountName}-http"),
+        ThreadPoolExecutor.AbortPolicy(),
     )
-    private val dispatcher = Executors.newSingleThreadScheduledExecutor(
-        NamedThreadFactory("payment-${properties.accountName}-dispatcher")
-    )
-    private var closed = false
-
-    init {
-        // Wake up to fill free workers as a batch; rate limiting happens at the network boundary.
-        dispatcher.scheduleWithFixedDelay(
-            { dispatchAvailable() }, 0, 1, TimeUnit.MILLISECONDS
-        )
-    }
 
     @Synchronized
     fun submit(task: PaymentTask) {
-        when {
-            closed -> fail(task, "Payment scheduler stopped")
-            !queue.offer(task) -> fail(task, "Payment queue full")
+        if (workers.isShutdown) {
+            fail(task, "Payment scheduler stopped")
+            return
+        }
+        try {
+            workers.execute(PaymentJob(task))
+        } catch (e: RejectedExecutionException) {
+            fail(task, "Payment queue full")
         }
     }
 
-    @Synchronized
-    private fun dispatchAvailable() {
-        while (!closed && queue.isNotEmpty() && slots.tryAcquire()) {
-            val task = queue.remove()
+    private inner class PaymentJob(val task: PaymentTask) : Runnable {
+        override fun run() {
             try {
-                workers.execute {
-                    try {
-                        if (System.currentTimeMillis() >= task.deadline) {
-                            fail(task, "Payment deadline expired")
-                        } else {
-                            paymentHandler(task)
-                        }
-                    } catch (e: Exception) {
-                        logger.error("Payment {} failed", task.paymentId, e)
-                        fail(task, "Payment execution failed")
-                    } finally {
-                        slots.release()
-                        task.completion.complete(null)
-                    }
+                if (System.currentTimeMillis() >= task.deadline) {
+                    fail(task, "Payment deadline expired")
+                } else {
+                    paymentHandler(task)
                 }
             } catch (e: Exception) {
-                slots.release()
-                fail(task, "Payment worker unavailable")
+                logger.error("Payment {} failed", task.paymentId, e)
+                fail(task, "Payment execution failed")
+            } finally {
+                task.completion.complete(null)
             }
         }
     }
@@ -95,18 +78,16 @@ class PaymentAccountScheduler(
         }
     }
 
-    fun queueSize(): Int = queue.size
-    fun activePayments(): Int = parallelRequests - slots.availablePermits()
+    fun queueSize(): Int = workers.queue.size
+    fun activePayments(): Int = workers.activeCount
 
     @Synchronized
     override fun close() {
-        if (closed) return
-        closed = true
-        dispatcher.shutdown()
+        if (workers.isShutdown) return
         workers.shutdown()
         while (true) {
-            val task = queue.poll() ?: break
-            fail(task, "Payment scheduler stopped")
+            val job = workers.queue.poll() as PaymentJob? ?: break
+            fail(job.task, "Payment scheduler stopped")
         }
     }
 }

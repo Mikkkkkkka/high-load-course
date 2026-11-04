@@ -24,20 +24,16 @@ class SlidingWindowRateLimiter(
 
     override fun tick(): Boolean = lock.withLock { tryAcquire(nanoTime()) }
 
-    fun tickBlocking() = awaitPermit(null)
-
-    fun tickBlocking(deadline: Long) = awaitPermit(deadline)
-
-    private fun awaitPermit(deadline: Long?) = lock.withLock {
+    fun tickBlocking(deadline: Long) = lock.withLock {
         while (true) {
-            val remainingMillis = deadline?.minus(System.currentTimeMillis())
-            if (remainingMillis != null && remainingMillis <= 0) {
+            val remainingMillis = deadline - System.currentTimeMillis()
+            if (remainingMillis <= 0) {
                 throw SocketTimeoutException("Payment deadline expired")
             }
             val now = nanoTime()
             if (tryAcquire(now)) return
             val waitNanos = windowNanos - (now - starts.first)
-            val remainingNanos = remainingMillis?.let { TimeUnit.MILLISECONDS.toNanos(it) } ?: Long.MAX_VALUE
+            val remainingNanos = TimeUnit.MILLISECONDS.toNanos(remainingMillis)
             changed.awaitNanos(minOf(waitNanos, remainingNanos))
         }
     }

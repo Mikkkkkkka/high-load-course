@@ -6,6 +6,8 @@ import java.time.Duration
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -14,6 +16,37 @@ class PaymentCompletionTest {
 
     private fun task(deadline: Long = System.currentTimeMillis() + 3000) =
         PaymentTask(UUID.randomUUID(), 100, System.currentTimeMillis(), deadline)
+
+    @Test
+    fun `worker pool bounds concurrency and runs queued payments after completion`() {
+        val entered = CountDownLatch(3)
+        val release = CountDownLatch(1)
+        val active = AtomicInteger()
+        val peak = AtomicInteger()
+        val payments = List(6) { task(System.currentTimeMillis() + 10000) }
+        PaymentAccountScheduler(properties.copy(parallelRequests = 3), {
+            val count = active.incrementAndGet()
+            peak.updateAndGet { maxOf(it, count) }
+            entered.countDown()
+            try {
+                check(release.await(5, TimeUnit.SECONDS))
+            } finally {
+                active.decrementAndGet()
+            }
+        }, { _, reason -> error(reason) }, queueCapacity = 3).use { scheduler ->
+            try {
+                payments.forEach(scheduler::submit)
+                assertTrue(entered.await(5, TimeUnit.SECONDS))
+                assertEquals(3, scheduler.activePayments())
+                assertEquals(3, scheduler.queueSize())
+                assertTrue(payments.none { it.completion.isDone })
+            } finally {
+                release.countDown()
+            }
+            payments.forEach { it.completion.get(5, TimeUnit.SECONDS) }
+            assertEquals(3, peak.get())
+        }
+    }
 
     @Test
     fun `completion waits for handler to finish`() {
