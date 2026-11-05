@@ -10,6 +10,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.slf4j.LoggerFactory
 import ru.quipy.core.EventSourcingService
+import ru.quipy.common.utils.SlidingWindowRateLimiter
 import ru.quipy.custom.PaymentAccountScheduler
 import ru.quipy.custom.PaymentTask
 import ru.quipy.payments.api.PaymentAggregate
@@ -26,6 +27,8 @@ class PaymentExternalSystemAdapterImpl(
     private val paymentProviderHostPort: String,
     private val token: String,
     private val meterRegistry: MeterRegistry,
+    rateWindow: Duration = Duration.ofMillis(1000),
+    private val admission: PaymentAdmission? = null,
 ) : PaymentExternalSystemAdapter, AutoCloseable {
 
     companion object {
@@ -37,33 +40,20 @@ class PaymentExternalSystemAdapterImpl(
 
     private val serviceName = properties.serviceName
     private val accountName = properties.accountName
-    private val sendLock = Any()
-    private val sendIntervalNanos = (1_000_000_000L + properties.rateLimitPerSec - 1) /
-        properties.rateLimitPerSec + 1_000_000L
-    private var lastSendAt: Long? = null
+    private val sendWindow = admission?.sendWindow
+        ?: SlidingWindowRateLimiter(properties.rateLimitPerSec.toLong(), rateWindow)
 
     private val client = OkHttpClient.Builder()
         .retryOnConnectionFailure(false)
         .readTimeout(0, TimeUnit.MILLISECONDS)
         .addNetworkInterceptor { chain ->
             val task = requireNotNull(chain.request().tag(PaymentTask::class.java))
-            awaitSendSlot(task.deadline)
+            sendWindow.tickBlocking(task.deadline)
+            admission?.release(task.paymentId)
+            queueWait.record(Duration.ofMillis((now() - task.paymentStartedAt).coerceAtLeast(0)))
             chain.proceed(chain.request())
         }
         .build()
-
-    private fun awaitSendSlot(deadline: Long) = synchronized(sendLock) {
-        while (true) {
-            val remainingMillis = deadline - now()
-            if (remainingMillis <= 0) throw SocketTimeoutException("Payment deadline expired")
-            val previousSendAt = lastSendAt
-            val waitNanos = if (previousSendAt == null) 0L else
-                sendIntervalNanos - (System.nanoTime() - previousSendAt)
-            if (waitNanos <= 0) break
-            TimeUnit.NANOSECONDS.sleep(minOf(waitNanos, TimeUnit.MILLISECONDS.toNanos(remainingMillis)))
-        }
-        lastSendAt = System.nanoTime()
-    }
 
     private val scheduler = PaymentAccountScheduler(
         properties = properties,
@@ -82,6 +72,7 @@ class PaymentExternalSystemAdapterImpl(
     }
 
     private fun recordFailure(task: PaymentTask, reason: String) {
+        admission?.release(task.paymentId)
         meterRegistry.counter("payment.rejected", "account", accountName, "reason", reason).increment()
         val transactionId = UUID.randomUUID()
         paymentESService.update(task.paymentId) {
@@ -115,7 +106,6 @@ class PaymentExternalSystemAdapterImpl(
         val paymentId = task.paymentId
         val amount = task.amount
         val paymentStartedAt = task.paymentStartedAt
-        queueWait.record(Duration.ofMillis((now() - paymentStartedAt).coerceAtLeast(0)))
 
         logger.warn(
             "[$accountName] Submitting payment request for payment $paymentId"
@@ -235,6 +225,8 @@ class PaymentExternalSystemAdapterImpl(
                     }
                 }
             }
+        } finally {
+            admission?.release(paymentId)
         }
     }
 
