@@ -6,8 +6,8 @@ import ru.quipy.payments.logic.PaymentAccountProperties
 import java.util.UUID
 import java.util.concurrent.Executors
 import java.util.concurrent.LinkedBlockingQueue
-import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 
 data class PaymentTask(
     val paymentId: UUID,
@@ -29,23 +29,14 @@ class PaymentAccountScheduler(
 
     private val logger = LoggerFactory.getLogger(javaClass)
     private val queue = LinkedBlockingQueue<PaymentTask>(queueCapacity)
-    private val parallelRequests = properties.parallelRequests
-    private val slots = Semaphore(parallelRequests)
+    private val active = AtomicInteger()
     private val workers = Executors.newFixedThreadPool(
-        parallelRequests, NamedThreadFactory("payment-${properties.accountName}-http")
+        properties.parallelRequests, NamedThreadFactory("payment-${properties.accountName}-http")
     )
-    private val dispatcher = Executors.newSingleThreadScheduledExecutor(
-        NamedThreadFactory("payment-${properties.accountName}-dispatcher")
-    )
-    private var closed = false
-
-    private val intervalNanos = (1_000_000_000L + properties.rateLimitPerSec - 1) /
-            properties.rateLimitPerSec + 1_000_000L
+    @Volatile private var closed = false
 
     init {
-        dispatcher.scheduleWithFixedDelay(
-            { dispatchNext() }, 0, intervalNanos, TimeUnit.NANOSECONDS
-        )
+        repeat(properties.parallelRequests) { workers.execute(::processQueue) }
     }
 
     @Synchronized
@@ -56,28 +47,28 @@ class PaymentAccountScheduler(
         }
     }
 
-    @Synchronized
-    private fun dispatchNext() {
-        if (closed || queue.isEmpty() || !slots.tryAcquire()) return
-        val task = queue.remove()
-        try {
-            workers.execute {
-                try {
-                    if (System.currentTimeMillis() >= task.deadline) {
-                        fail(task, "Payment deadline expired")
-                    } else {
-                        paymentHandler(task)
-                    }
-                } catch (e: Exception) {
-                    logger.error("Payment {} failed", task.paymentId, e)
-                    fail(task, "Payment execution failed")
-                } finally {
-                    slots.release()
-                }
+    private fun processQueue() {
+        while (!closed) {
+            val task = try {
+                queue.poll(1, TimeUnit.SECONDS) ?: continue
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+                return
             }
-        } catch (e: Exception) {
-            slots.release()
-            fail(task, "Payment worker unavailable")
+            active.incrementAndGet()
+            try {
+                if (System.currentTimeMillis() >= task.deadline) {
+                    fail(task, "Payment deadline expired")
+                } else {
+                    // The network interceptor enforces the rate at the actual HTTP send.
+                    paymentHandler(task)
+                }
+            } catch (e: Exception) {
+                logger.error("Payment {} failed", task.paymentId, e)
+                fail(task, "Payment execution failed")
+            } finally {
+                active.decrementAndGet()
+            }
         }
     }
 
@@ -90,13 +81,12 @@ class PaymentAccountScheduler(
     }
 
     fun queueSize(): Int = queue.size
-    fun activePayments(): Int = parallelRequests - slots.availablePermits()
+    fun activePayments(): Int = active.get()
 
     @Synchronized
     override fun close() {
         if (closed) return
         closed = true
-        dispatcher.shutdown()
         workers.shutdown()
         while (true) {
             val task = queue.poll() ?: break

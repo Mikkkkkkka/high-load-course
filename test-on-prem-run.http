@@ -17,3 +17,55 @@ Content-Type: application/json
 ### Stop running test to save credits
 # @timeout 120
 POST http://77.234.215.138:31234/test/stop/{{serviceName}}
+
+### Case 5 - Test 1
+# @timeout 600
+POST http://77.234.215.138:34321/run
+Content-Type: application/json
+
+{
+  "serviceName": "{{serviceName}}",
+  "token": "{{token}}",
+  "branch": "case-5",
+  "accounts": "acc-23",
+  "processingTimeMillis": 2500,
+  "testCount": 3000,
+  "ratePerSecond": 15,
+  "onPremises": true
+}
+
+
+### Case 5 - Test 2
+# @timeout 600
+POST http://77.234.215.138:34321/run
+Content-Type: application/json
+
+{
+  "serviceName": "{{serviceName}}",
+  "token": "{{token}}",
+  "branch": "case-5",
+  "accounts": "acc-23",
+  "processingTimeMillis": 13000,
+  "testCount": 2200,
+  "profile": "s_0.7_60",
+  "ratePerSecond": 11,
+  "onPremises": true
+}
+
+
+### Case 5 - Test 3
+# @timeout 600
+POST http://77.234.215.138:34321/run
+Content-Type: application/json
+
+{
+  "serviceName": "{{serviceName}}",
+  "token": "{{token}}",
+  "branch": "case-5",
+  "accounts": "acc-23",
+  "runits": 90,
+  "processingTimeMillis": 26000,
+  "testCount": 1050,
+  "ratePerSecond": 3,
+  "onPremises": true
+}

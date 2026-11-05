@@ -13,3 +13,43 @@ Content-Type: application/json
 ### Stop running test to save time and resources
 # @timeout 120
 POST http://localhost:1234/test/stop/{{serviceName}}
+
+### Case 5 - Test 1
+POST http://localhost:1234/test/run
+Content-Type: application/json
+
+{
+  "serviceName": "{{serviceName}}",
+  "token": "{{token}}",
+  "processingTimeMillis": 2500,
+  "testCount": 3000,
+  "ratePerSecond": 15
+}
+
+
+### Case 5 - Test 2
+POST http://localhost:1234/test/run
+Content-Type: application/json
+
+{
+  "serviceName": "{{serviceName}}",
+  "token": "{{token}}",
+  "processingTimeMillis": 13000,
+  "testCount": 2200,
+  "profile": "s_0.7_60",
+  "ratePerSecond": 11
+}
+
+
+### Case 5 - Test 3
+POST http://localhost:1234/test/run
+Content-Type: application/json
+
+{
+  "serviceName": "{{serviceName}}",
+  "token": "{{token}}",
+  "runits": 90,
+  "processingTimeMillis": 26000,
+  "testCount": 1050,
+  "ratePerSecond": 3
+}

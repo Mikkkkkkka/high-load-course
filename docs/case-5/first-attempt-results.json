@@ -1,0 +1,113 @@
+{
+  "account": {
+    "averageProcessingTimeSeconds": 1,
+    "rateLimitPerSec": 11,
+    "name": "acc-23",
+    "price": 30,
+    "parallelRequests": 64
+  },
+  "candidate": {
+    "ratePerSecond": 11,
+    "retryAfterMillis": 91,
+    "algorithm": "continuous token bucket",
+    "capacity": 11
+  },
+  "runs": [
+    {
+      "run": "baseline-test1",
+      "parameters": {
+        "testCount": 3000,
+        "ratePerSecond": 15,
+        "processingTimeMillis": 2500
+      },
+      "startedAt": "2026-11-05T02:50:04.2563212+03:00",
+      "collectedAt": "2026-11-05T02:53:35.639738+03:00",
+      "finished": true,
+      "success": 24.0,
+      "fail": 2976.0,
+      "errors": 0.0,
+      "income": 10657.0,
+      "expenses": 1650.0,
+      "durationSeconds": 202.248,
+      "incomePercent": 86.593,
+      "paidCalls": 55.0,
+      "paidCallsWithoutClientSuccess": 31.0
+    },
+    {
+      "run": "bucket11-test1",
+      "parameters": {
+        "processingTimeMillis": 2500,
+        "ratePerSecond": 15,
+        "testCount": 3000
+      },
+      "startedAt": "2026-11-05T02:59:52.8244414+03:00",
+      "collectedAt": "2026-11-05T03:04:46.3222853+03:00",
+      "finished": true,
+      "success": 490.0,
+      "fail": 2510.0,
+      "errors": 0.0,
+      "admitted": 3000.0,
+      "admissionRejections": 1175.0,
+      "income": 199821.0,
+      "expenses": 29070.0,
+      "durationSeconds": 280.682,
+      "incomePercent": 87.3,
+      "paidCalls": 969.0,
+      "paidCallsWithoutClientSuccess": 479.0
+    },
+    {
+      "run": "bucket11-test2",
+      "parameters": {
+        "profile": "s_0.7_60",
+        "processingTimeMillis": 13000,
+        "ratePerSecond": 11,
+        "testCount": 2200
+      },
+      "startedAt": "2026-11-05T03:04:46.4036503+03:00",
+      "collectedAt": "2026-11-05T03:09:19.0084218+03:00",
+      "finished": true,
+      "success": 2200.0,
+      "fail": 0.0,
+      "errors": 0.0,
+      "admitted": 2200.0,
+      "admissionRejections": 510.0,
+      "income": 898198.0,
+      "expenses": 66000.0,
+      "durationSeconds": 253.06,
+      "incomePercent": 93.155,
+      "paidCalls": 2200.0,
+      "paidCallsWithoutClientSuccess": 0.0
+    },
+    {
+      "run": "bucket11-test3",
+      "parameters": {
+        "processingTimeMillis": 26000,
+        "runits": 90,
+        "ratePerSecond": 3,
+        "testCount": 1050
+      },
+      "startedAt": "2026-11-05T03:09:19.0880481+03:00",
+      "collectedAt": "2026-11-05T03:13:18.4693877+03:00",
+      "finished": false,
+      "success": 36.0,
+      "fail": 0.0,
+      "errors": 307.0,
+      "admitted": 36.0,
+      "admissionRejections": 467.0,
+      "income": 13657.0,
+      "expenses": 1080.0,
+      "durationSeconds": 183.62,
+      "incomePercent": 92.672,
+      "paidCalls": 36.0,
+      "paidCallsWithoutClientSuccess": 0.0
+    }
+  ],
+  "notes": [
+    "Only local runs.",
+    "Capacity 5 trial was stopped early because it underutilized the account.",
+    "Test 3 is intentionally bounded; finished=false means a partial run, not a completed or passed test.",
+    "HTTP 429 is counted separately from FAIL; the tester replaces rejected tests.",
+    "Duration ends at the last recorded outcome or generator wrap marker, and is an observation rather than a benchmark guarantee.",
+    "Test 3 also recorded 307 HTTP/2 RST_STREAM protocol errors in ChoosingUserAccountStage, before payment admission. Its partial result is confounded by transport errors."
+  ]
+}

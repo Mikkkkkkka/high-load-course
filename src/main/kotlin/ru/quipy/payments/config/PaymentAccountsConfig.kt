@@ -16,6 +16,7 @@ import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.util.*
+import java.time.Duration
 
 
 @Configuration
@@ -37,6 +38,9 @@ class PaymentAccountsConfig {
     @Value("#{'\${payment.accounts}'.split(',')}")
     lateinit var allowedAccounts: List<String>
 
+    @Value("\${payment.rate-window-millis:1000}")
+    var rateWindowMillis: Long = 1000
+
     private var adapters: List<PaymentExternalSystemAdapterImpl> = emptyList()
 
     @PreDestroy
@@ -45,7 +49,8 @@ class PaymentAccountsConfig {
     @Bean
     fun accountAdapters(
         paymentService: EventSourcingService<UUID, PaymentAggregate, PaymentAggregateState>,
-        meterRegistry: MeterRegistry
+        meterRegistry: MeterRegistry,
+        admission: PaymentAdmission,
     ): List<PaymentExternalSystemAdapter> {
         val request = HttpRequest.newBuilder()
             .uri(URI("http://${paymentProviderHostPort}/external/accounts?serviceName=$serviceName&token=$token"))
@@ -55,22 +60,30 @@ class PaymentAccountsConfig {
         val resp = javaClient.send(request, HttpResponse.BodyHandlers.ofString())
 
         println("\nPayment accounts list:")
-        adapters = mapper.readValue<List<PaymentAccountProperties>>(
+        val accounts = mapper.readValue<List<PaymentAccountProperties>>(
             resp.body(),
             mapper.typeFactory.constructCollectionType(List::class.java, PaymentAccountProperties::class.java)
         )
             .filter { it.accountName in allowedAccounts }
             .map { it.copy(enabled = true) }
             .onEach(::println)
-            .map {
-                PaymentExternalSystemAdapterImpl(
-                    it,
-                    paymentService,
-                    paymentProviderHostPort,
-                    token,
-                    meterRegistry
-                )
+        if (admission.enabled) {
+            require(accounts.size == 1) { "Deadline admission requires one payment account" }
+            require(accounts.single().rateLimitPerSec == admission.rate) {
+                "Admission rate must match the payment account rate"
             }
+        }
+        adapters = accounts.map {
+            PaymentExternalSystemAdapterImpl(
+                it,
+                paymentService,
+                paymentProviderHostPort,
+                token,
+                meterRegistry,
+                Duration.ofMillis(rateWindowMillis),
+                admission.takeIf { it.enabled }
+            )
+        }
         return adapters
     }
 }

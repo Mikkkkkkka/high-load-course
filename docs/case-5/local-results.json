@@ -1,0 +1,95 @@
+{
+  "account": {
+    "parallelRequests": 64,
+    "rateLimitPerSec": 11,
+    "name": "acc-23",
+    "processingUpperBoundMillis": 2000,
+    "averageProcessingTimeSeconds": 1,
+    "price": 30
+  },
+  "candidate": {
+    "rate": 11,
+    "algorithm": "deadline admission using actual sends and pending payments with FIFO quota wait",
+    "http2Enabled": false,
+    "retryAfterMillis": 91,
+    "processingReserveMillis": 2150,
+    "windowMillis": 1000
+  },
+  "runs": [
+    {
+      "run": "exact1000-test1",
+      "parameters": {
+        "ratePerSecond": 15,
+        "testCount": 3000,
+        "processingTimeMillis": 2500
+      },
+      "startedAt": "2026-11-05T04:11:45.8401061+03:00",
+      "collectedAt": "2026-11-05T04:16:30.4474138+03:00",
+      "durationSeconds": 278.343,
+      "finished": true,
+      "success": 3000.0,
+      "fail": 0.0,
+      "errors": 0.0,
+      "admitted": 3000.0,
+      "admissionRejections": 1148.0,
+      "income": 1212954.0,
+      "expenses": 90000.0,
+      "incomePercent": 93.093,
+      "paidCalls": 3000.0,
+      "paidCallsWithoutClientSuccess": 0.0
+    },
+    {
+      "run": "exact1000-test2",
+      "parameters": {
+        "ratePerSecond": 11,
+        "testCount": 2200,
+        "profile": "s_0.7_60",
+        "processingTimeMillis": 13000
+      },
+      "startedAt": "2026-11-05T04:16:30.5188471+03:00",
+      "collectedAt": "2026-11-05T04:20:13.0922955+03:00",
+      "durationSeconds": 209.549,
+      "finished": true,
+      "success": 2200.0,
+      "fail": 0.0,
+      "errors": 0.0,
+      "admitted": 2200.0,
+      "admissionRejections": 27.0,
+      "income": 879878.0,
+      "expenses": 66000.0,
+      "incomePercent": 93.022,
+      "paidCalls": 2200.0,
+      "paidCallsWithoutClientSuccess": 0.0
+    },
+    {
+      "run": "exact1000-test3",
+      "parameters": {
+        "ratePerSecond": 3,
+        "processingTimeMillis": 26000,
+        "testCount": 1050,
+        "runits": 90
+      },
+      "startedAt": "2026-11-05T12:38:39.6565899+03:00",
+      "collectedAt": "2026-11-05T12:43:45.0653302+03:00",
+      "durationSeconds": 294.46,
+      "finished": true,
+      "success": 1050.0,
+      "fail": 0.0,
+      "errors": 0.0,
+      "admitted": 1050.0,
+      "admissionRejections": 6.0,
+      "income": 428399.0,
+      "expenses": 31500.0,
+      "incomePercent": 93.151,
+      "paidCalls": 1050.0,
+      "paidCallsWithoutClientSuccess": 0.0
+    }
+  ],
+  "notes": [
+    "All runs use the local tester and the same admission/rate settings. Test 3 was repeated after increasing Jetty acceptQueueSize to 1024; tests 1 and 2 preceded that change.",
+    "HTTP 429 is counted separately from FAIL; the tester replaces rejected tests.",
+    "Duration ends at the last recorded outcome or generator wrap marker.",
+    "HTTP/2 is disabled locally; the Jetty customizer tolerates its absence.",
+    "No unit tests are included; validation uses the local course runner."
+  ]
+}

@@ -1,0 +1,95 @@
+{
+  "account": {
+    "rateLimitPerSec": 11,
+    "processingUpperBoundMillis": 2000,
+    "price": 30,
+    "name": "acc-23",
+    "averageProcessingTimeSeconds": 1,
+    "parallelRequests": 64
+  },
+  "candidate": {
+    "rate": 11,
+    "retryAfterMillis": 91,
+    "processingReserveMillis": 2150,
+    "http2Enabled": false,
+    "algorithm": "deadline admission using actual sends and pending payments with FIFO quota wait",
+    "windowMillis": 1010
+  },
+  "runs": [
+    {
+      "run": "http1-test1",
+      "parameters": {
+        "testCount": 3000,
+        "ratePerSecond": 15,
+        "processingTimeMillis": 2500
+      },
+      "startedAt": "2026-11-05T03:50:34.2356418+03:00",
+      "collectedAt": "2026-11-05T03:55:29.2503638+03:00",
+      "durationSeconds": 289.811,
+      "finished": true,
+      "success": 3000.0,
+      "fail": 0.0,
+      "errors": 0.0,
+      "admitted": 3000.0,
+      "admissionRejections": 1312.0,
+      "income": 1193570.0,
+      "expenses": 90000.0,
+      "incomePercent": 92.988,
+      "paidCalls": 3000.0,
+      "paidCallsWithoutClientSuccess": 0.0
+    },
+    {
+      "run": "http1-test2",
+      "parameters": {
+        "profile": "s_0.7_60",
+        "ratePerSecond": 11,
+        "processingTimeMillis": 13000,
+        "testCount": 2200
+      },
+      "startedAt": "2026-11-05T03:55:29.3606191+03:00",
+      "collectedAt": "2026-11-05T03:59:21.2676012+03:00",
+      "durationSeconds": 210.964,
+      "finished": true,
+      "success": 2200.0,
+      "fail": 0.0,
+      "errors": 0.0,
+      "admitted": 2200.0,
+      "admissionRejections": 42.0,
+      "income": 893823.0,
+      "expenses": 66000.0,
+      "incomePercent": 93.124,
+      "paidCalls": 2200.0,
+      "paidCallsWithoutClientSuccess": 0.0
+    },
+    {
+      "run": "http1-test3",
+      "parameters": {
+        "ratePerSecond": 3,
+        "processingTimeMillis": 26000,
+        "testCount": 1050,
+        "runits": 90
+      },
+      "startedAt": "2026-11-05T03:59:21.3429829+03:00",
+      "collectedAt": "2026-11-05T04:04:27.4805243+03:00",
+      "durationSeconds": 295.751,
+      "finished": true,
+      "success": 1050.0,
+      "fail": 0.0,
+      "errors": 0.0,
+      "admitted": 1050.0,
+      "admissionRejections": 18.0,
+      "income": 415265.0,
+      "expenses": 31500.0,
+      "incomePercent": 92.949,
+      "paidCalls": 1050.0,
+      "paidCallsWithoutClientSuccess": 0.0
+    }
+  ],
+  "notes": [
+    "All runs use the local tester and the same configuration.",
+    "HTTP 429 is counted separately from FAIL; the tester replaces rejected tests.",
+    "Duration ends at the last recorded outcome or generator wrap marker.",
+    "HTTP/2 is disabled locally; the Jetty customizer tolerates its absence.",
+    "No unit tests are included; validation uses the local course runner."
+  ]
+}

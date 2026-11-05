@@ -18,7 +18,8 @@ import java.util.concurrent.TimeUnit
 
 @Service
 class OrderPayer(
-    meterRegistry: MeterRegistry
+    meterRegistry: MeterRegistry,
+    private val paymentAdmission: PaymentAdmission,
 ) {
 
     companion object {
@@ -65,16 +66,21 @@ class OrderPayer(
     fun processPayment(orderId: UUID, amount: Int, paymentId: UUID, deadline: Long): Long {
         val createdAt = System.currentTimeMillis()
         paymentExecutor.submit {
-            val createdEvent = paymentESService.create {
-                it.create(
-                    paymentId,
-                    orderId,
-                    amount
-                )
-            }
-            logger.trace("Payment ${createdEvent.paymentId} for order $orderId created.")
+            try {
+                val createdEvent = paymentESService.create {
+                    it.create(
+                        paymentId,
+                        orderId,
+                        amount
+                    )
+                }
+                logger.trace("Payment ${createdEvent.paymentId} for order $orderId created.")
 
-            paymentService.submitPaymentRequest(paymentId, amount, createdAt, deadline)
+                paymentService.submitPaymentRequest(paymentId, amount, createdAt, deadline)
+            } catch (e: Exception) {
+                paymentAdmission.release(paymentId)
+                throw e
+            }
         }
         return createdAt
     }
