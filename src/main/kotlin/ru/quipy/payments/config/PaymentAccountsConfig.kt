@@ -44,6 +44,12 @@ class PaymentAccountsConfig {
     @Value("\${payment.retry-min-amount:0}")
     var retryMinAmount: Int = 0
 
+    @Value("\${payment.acc-7.timeout-millis:0}")
+    var case7TimeoutMillis: Long = 0
+
+    @Value("\${payment.acc-7.min-amount:0}")
+    var case7MinAmount: Int = 0
+
     private var adapters: List<PaymentExternalSystemAdapterImpl> = emptyList()
 
     @PreDestroy
@@ -55,6 +61,8 @@ class PaymentAccountsConfig {
         meterRegistry: MeterRegistry,
         admission: PaymentAdmission,
     ): List<PaymentExternalSystemAdapter> {
+        require(case7TimeoutMillis >= 0) { "Payment provider timeout must be non-negative" }
+        require(case7MinAmount >= 0) { "Minimum payment amount must be non-negative" }
         val request = HttpRequest.newBuilder()
             .uri(URI("http://${paymentProviderHostPort}/external/accounts?serviceName=$serviceName&token=$token"))
             .GET()
@@ -76,6 +84,7 @@ class PaymentAccountsConfig {
                 "Admission rate must match the payment account rate"
             }
         }
+        val minAmount = case7MinAmount.takeIf { accounts.singleOrNull()?.accountName == "acc-7" } ?: 0
         adapters = accounts.map {
             PaymentExternalSystemAdapterImpl(
                 it,
@@ -86,6 +95,8 @@ class PaymentAccountsConfig {
                 Duration.ofMillis(rateWindowMillis),
                 admission.takeIf { it.enabled },
                 retryMinAmount = retryMinAmount,
+                providerTimeoutMillis = if (it.accountName == "acc-7") case7TimeoutMillis else 0,
+                minAmount = minAmount,
             )
         }
         return adapters

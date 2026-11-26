@@ -2092,6 +2092,101 @@
           ],
           "title": "(Test system -> Online shop)  Average request latent time (before submit)",
           "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "description": "Attempts started after acquiring a provider rate slot, grouped by reason.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "min": 0
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 116
+          },
+          "id": 110,
+          "options": {
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "PBFA97CFB590B2093"
+              },
+              "editorMode": "code",
+              "expr": "sum by (service, reason) (increase(payment_http_retries_total{account=\"acc-7\",service=~\"$service\"}[1m]))",
+              "legendFormat": "{{service}} / {{reason}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Case 7 · Payment retries per minute",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "description": "Latency from sending an attempt to response headers. Quantiles are shown per instance. HTTP 408 is plotted separately.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "min": 0
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 116
+          },
+          "id": 111,
+          "options": {
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "PBFA97CFB590B2093"
+              },
+              "editorMode": "code",
+              "expr": "payment_http_response_seconds{account=\"acc-7\",service=~\"$service\",outcome=\"response\"}",
+              "legendFormat": "{{service}} / {{instance}} / q={{quantile}}",
+              "range": true,
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "PBFA97CFB590B2093"
+              },
+              "editorMode": "code",
+              "expr": "payment_http_response_seconds_max{account=\"acc-7\",service=~\"$service\",outcome=\"provider_timeout\"} > 0",
+              "legendFormat": "{{service}} / {{instance}} / HTTP 408 max",
+              "range": true,
+              "refId": "B"
+            }
+          ],
+          "title": "Case 7 · Provider response latency",
+          "type": "timeseries"
         }
       ],
       "title": "Http calls info",
