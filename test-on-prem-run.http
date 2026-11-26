@@ -69,3 +69,18 @@ Content-Type: application/json
   "ratePerSecond": 3,
   "onPremises": true
 }
+
+### Case 7 - Base
+# @timeout 600
+POST http://77.234.215.138:34321/run
+Content-Type: application/json
+
+{
+  "serviceName": "{{serviceName}}",
+  "token": "{{token}}",
+  "accounts": "acc-7",
+  "ratePerSecond": 5,
+  "testCount": 1000,
+  "processingTimeMillis": 6000,
+  "onPremises": true
+}
