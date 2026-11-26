@@ -1,0 +1,44 @@
+{
+  "case": 4,
+  "account": "acc-18",
+  "environment": "remote",
+  "date": "2026-11-05",
+  "commit": "3e17bb7701c37498d775274f5e619824e16a36f9",
+  "request": {
+    "testCount": 6000,
+    "processingTimeMillis": 3000,
+    "ratePerSecond": 200
+  },
+  "launchHttpStatus": 200,
+  "launchResponseFile": "2026-11-05T023012.200.json",
+  "observedResults": {
+    "reportedSuccessPercent": 100,
+    "success": 5993,
+    "unreportedByTester": 7,
+    "fail": 0,
+    "conservativeSuccessPercentOfRequested": 99.88333333333334,
+    "error": 0
+  },
+  "finance": {
+    "income": 2404408,
+    "incomePercent": 93.04271576713549,
+    "paidCalls": 5993,
+    "wastedPaidCalls": 0,
+    "expensesPercent": 6.9572842328645095,
+    "expenses": 179790
+  },
+  "lastPaymentLogAt": "2026-11-04T23:31:29.051Z",
+  "countersStableAt": "2026-11-05T02:32:35.9392599+03:00",
+  "grafana": {
+    "to": "2026-11-05T02:32:20+03:00",
+    "minuteSuccessPercent": 100,
+    "displayedSuccessEstimate": 6061,
+    "screenshot": "images/remote-run.jpg",
+    "from": "2026-11-05T02:29:55+03:00"
+  },
+  "logsUrl": "http://77.234.215.138:34321/logs/4f5cd0126f03c9b80c2a0a4e5cdedbb2d8d4d31f189af5b5f6c452ebb7f9ee02?tail=500",
+  "logTailLimit": 5000,
+  "criteriaPassed": true,
+  "caveat": "7 requested tests have no final result. Grafana increase values are estimates; exact outcomes and finance come from raw tester metrics.",
+  "evidenceDirectory": "build/case4-validation/nov-remote"
+}

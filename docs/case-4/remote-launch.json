@@ -1,0 +1,17 @@
+{
+  "endpoint": "http://77.234.215.138:34321/run",
+  "account": "acc-18",
+  "request": {
+    "processingTimeMillis": 3000,
+    "testCount": 6000,
+    "ratePerSecond": 200
+  },
+  "case": 4,
+  "httpStatus": 500,
+  "remoteResultVerified": false,
+  "branch": "case-4",
+  "response": "Internal Server Error",
+  "attempts": 2,
+  "retryStartedAt": "2026-10-22T20:37:40.3616851+03:00",
+  "retryFinishedAt": "2026-10-22T20:42:42.7290569+03:00"
+}

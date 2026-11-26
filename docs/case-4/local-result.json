@@ -1,0 +1,48 @@
+{
+  "case": 4,
+  "account": "acc-18",
+  "request": {
+    "ratePerSecond": 200,
+    "testCount": 6000,
+    "processingTimeMillis": 3000
+  },
+  "startedAt": "2026-10-22T20:08:15.5234472+03:00",
+  "lastResultAt": "2026-10-22T20:10:28.222+03:00",
+  "coldJvm": true,
+  "httpVersion": "HTTP/1.1",
+  "bufferCapacity": 110,
+  "initialAdmissionLimit": 1,
+  "retryDelayMillis": 1000,
+  "rawCountersBefore": {
+    "SUCCESS": 17442.0,
+    "ERROR": 315.0,
+    "FAIL": 135.0
+  },
+  "rawCountersAfter": {
+    "SUCCESS": 23427.0,
+    "ERROR": 315.0,
+    "FAIL": 135.0
+  },
+  "observedResults": {
+    "success": 5985.0,
+    "fail": 0.0,
+    "error": 0.0,
+    "unreportedByTester": 15.0,
+    "reportedSuccessPercent": 100.0,
+    "conservativeSuccessPercentOfRequested": 99.75
+  },
+  "minuteSuccess": {
+    "samples": 27,
+    "minimumPercent": 100.0,
+    "maximumPercent": 100.0
+  },
+  "finance": {
+    "income": 2406603.0,
+    "expenses": 179550.0,
+    "incomePercent": 93.05725531320073,
+    "expensesPercent": 6.942744686799273
+  },
+  "criteriaPassed": true,
+  "caveat": "15 requested tests have no final result in tester metrics/log. They are not claimed successful; conservative success still exceeds 97 percent.",
+  "evidenceDirectory": "build/case4-validation/run-7"
+}
