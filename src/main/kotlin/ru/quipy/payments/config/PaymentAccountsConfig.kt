@@ -41,6 +41,9 @@ class PaymentAccountsConfig {
     @Value("\${payment.rate-window-millis:1000}")
     var rateWindowMillis: Long = 1000
 
+    @Value("\${payment.retry-min-amount:0}")
+    var retryMinAmount: Int = 0
+
     private var adapters: List<PaymentExternalSystemAdapterImpl> = emptyList()
 
     @PreDestroy
@@ -81,7 +84,8 @@ class PaymentAccountsConfig {
                 token,
                 meterRegistry,
                 Duration.ofMillis(rateWindowMillis),
-                admission.takeIf { it.enabled }
+                admission.takeIf { it.enabled },
+                retryMinAmount = retryMinAmount,
             )
         }
         return adapters

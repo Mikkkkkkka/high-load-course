@@ -29,12 +29,13 @@ class PaymentExternalSystemAdapterImpl(
     private val meterRegistry: MeterRegistry,
     rateWindow: Duration = Duration.ofMillis(1000),
     private val admission: PaymentAdmission? = null,
+    private val retryMinAmount: Int = 0,
 ) : PaymentExternalSystemAdapter, AutoCloseable {
 
     private data class PaymentAttempt(val task: PaymentTask, val isRetry: Boolean)
 
     companion object {
-        private const val MAX_TEMPORARY_ERROR_RETRIES = 2
+        private const val MAX_TEMPORARY_ERROR_RETRIES = 1
         val logger = LoggerFactory.getLogger(PaymentExternalSystemAdapter::class.java)
 
         val emptyBody = ByteArray(0).toRequestBody(null)
@@ -231,6 +232,10 @@ class PaymentExternalSystemAdapterImpl(
             val temporaryFailure = !body.result && body.message == "Temporary error" &&
                     body.transactionId == txId && body.paymentId == paymentId
             if (!temporaryFailure || retries >= MAX_TEMPORARY_ERROR_RETRIES || now() >= task.deadline) {
+                return body
+            }
+            if (task.amount < retryMinAmount) {
+                logger.info("[$accountName] Skipping retry for payment $paymentId: amount ${task.amount} below $retryMinAmount")
                 return body
             }
             retries++
