@@ -31,7 +31,10 @@ class PaymentExternalSystemAdapterImpl(
     private val admission: PaymentAdmission? = null,
 ) : PaymentExternalSystemAdapter, AutoCloseable {
 
+    private data class PaymentAttempt(val task: PaymentTask, val isRetry: Boolean)
+
     companion object {
+        private const val MAX_TEMPORARY_ERROR_RETRIES = 2
         val logger = LoggerFactory.getLogger(PaymentExternalSystemAdapter::class.java)
 
         val emptyBody = ByteArray(0).toRequestBody(null)
@@ -47,10 +50,13 @@ class PaymentExternalSystemAdapterImpl(
         .retryOnConnectionFailure(false)
         .readTimeout(0, TimeUnit.MILLISECONDS)
         .addNetworkInterceptor { chain ->
-            val task = requireNotNull(chain.request().tag(PaymentTask::class.java))
+            val attempt = requireNotNull(chain.request().tag(PaymentAttempt::class.java))
+            val task = attempt.task
             sendWindow.tickBlocking(task.deadline)
-            admission?.release(task.paymentId)
-            queueWait.record(Duration.ofMillis((now() - task.paymentStartedAt).coerceAtLeast(0)))
+            if (!attempt.isRetry) {
+                admission?.release(task.paymentId)
+                queueWait.record(Duration.ofMillis((now() - task.paymentStartedAt).coerceAtLeast(0)))
+            }
             chain.proceed(chain.request())
         }
         .build()
@@ -139,7 +145,6 @@ class PaymentExternalSystemAdapterImpl(
                             "&amount=$amount"
                 )
                 post(emptyBody)
-                tag(PaymentTask::class.java, task)
             }.build()
 
             val remainingMillis = task.deadline - now()
@@ -149,45 +154,16 @@ class PaymentExternalSystemAdapterImpl(
                 }
                 return
             }
-            val call = client.newCall(request)
-            call.timeout().timeout(remainingMillis, TimeUnit.MILLISECONDS)
-            call.execute().use { response ->
-                val body = try {
-                    mapper.readValue(
-                        response.body?.string(),
-                        ExternalSysResponse::class.java
-                    )
-                } catch (e: Exception) {
-                    logger.error(
-                        "[$accountName] Payment parse error, " +
-                                "txId=$transactionId, payment=$paymentId",
-                        e
-                    )
-
-                    ExternalSysResponse(
-                        transactionId.toString(),
-                        paymentId.toString(),
-                        false,
-                        e.message
-                    )
-                }
-
-                logger.warn(
-                    "[$accountName] Payment processed for " +
-                            "txId: $transactionId, " +
-                            "payment: $paymentId, " +
-                            "succeeded: ${body.result}, " +
-                            "message: ${body.message}"
-                )
-
-                paymentESService.update(paymentId) {
-                    it.logProcessing(
-                        body.result,
-                        now(),
-                        transactionId,
-                        reason = body.message
-                    )
-                }
+            val body = sendPayment(request, task, transactionId)
+            logger.warn(
+                "[$accountName] Payment processed for " +
+                        "txId: $transactionId, " +
+                        "payment: $paymentId, " +
+                        "succeeded: ${body.result}, " +
+                        "message: ${body.message}"
+            )
+            paymentESService.update(paymentId) {
+                it.logProcessing(body.result, now(), transactionId, reason = body.message)
             }
         } catch (e: Exception) {
             when (e) {
@@ -227,6 +203,38 @@ class PaymentExternalSystemAdapterImpl(
             }
         } finally {
             admission?.release(paymentId)
+        }
+    }
+
+    private fun sendPayment(request: Request, task: PaymentTask, transactionId: UUID): ExternalSysResponse {
+        val txId = transactionId.toString()
+        val paymentId = task.paymentId.toString()
+        var retries = 0
+        while (true) {
+            val remainingMillis = task.deadline - now()
+            if (remainingMillis <= 0) throw SocketTimeoutException("Payment deadline expired")
+
+            val attemptRequest = request.newBuilder()
+                .tag(PaymentAttempt::class.java, PaymentAttempt(task, isRetry = retries > 0))
+                .build()
+            val call = client.newCall(attemptRequest)
+            call.timeout().timeout(remainingMillis, TimeUnit.MILLISECONDS)
+            val body = call.execute().use { response ->
+                try {
+                    mapper.readValue(response.body?.string(), ExternalSysResponse::class.java)
+                } catch (e: Exception) {
+                    logger.error("[$accountName] Payment parse error, txId=$txId, payment=$paymentId", e)
+                    return ExternalSysResponse(txId, paymentId, false, e.message)
+                }
+            }
+
+            val temporaryFailure = !body.result && body.message == "Temporary error" &&
+                    body.transactionId == txId && body.paymentId == paymentId
+            if (!temporaryFailure || retries >= MAX_TEMPORARY_ERROR_RETRIES || now() >= task.deadline) {
+                return body
+            }
+            retries++
+            logger.info("[$accountName] Retrying payment $paymentId after a temporary error, retry $retries")
         }
     }
 
